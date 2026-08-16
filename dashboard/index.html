@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PocketLab — Device Control Center</title>
+<meta name="description" content="PocketLab: a local device laboratory and control center for your phone — telemetry, network tools, security lab, IoT, and command center.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%2305070c%22/><circle cx=%2212%22 cy=%2212%22 r=%225%22 fill=%22none%22 stroke=%22%232dd4bf%22 stroke-width=%222%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ ICON SPRITE ============ -->
+<svg style="display:none" aria-hidden="true">
+  <defs>
+  <symbol id="icon-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+  </symbol>
+  <symbol id="icon-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="7" y="2" width="10" height="20" rx="2.2"/><line x1="11" y1="18" x2="13" y2="18"/>
+  </symbol>
+  <symbol id="icon-network" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="14" width="4" height="6" rx="1"/><rect x="10" y="9" width="4" height="11" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>
+  </symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2 L20 5.5 V11 C20 16.5 16.5 20.5 12 22 C7.5 20.5 4 16.5 4 11 V5.5 Z"/>
+  </symbol>
+  <symbol id="icon-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="1.8"/><path d="M8.5 8.5 C10 7 14 7 15.5 8.5"/><path d="M5.5 5.5 C9 2 15 2 18.5 5.5"/><path d="M8.5 15.5 C10 17 14 17 15.5 15.5"/><path d="M5.5 18.5 C9 22 15 22 18.5 18.5"/>
+  </symbol>
+  <symbol id="icon-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2.2"/><polyline points="6,9 10,12 6,15"/><line x1="12" y1="15" x2="17" y2="15"/>
+  </symbol>
+  <symbol id="icon-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+  </symbol>
+  <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 12 C5 6 9 4 12 4 C15 4 19 6 22 12 C19 18 15 20 12 20 C9 20 5 18 2 12 Z"/><circle cx="12" cy="12" r="3"/>
+  </symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3.2"/><path d="M12 2 V5.2 M12 18.8 V22 M2 12 H5.2 M18.8 12 H22 M4.9 4.9 L7.1 7.1 M16.9 16.9 L19.1 19.1 M19.1 4.9 L16.9 7.1 M7.1 16.9 L4.9 19.1"/>
+  </symbol>
+  <symbol id="icon-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="7" width="18" height="10" rx="2.2"/><line x1="22" y1="10" x2="22" y2="14"/>
+  </symbol>
+  <symbol id="icon-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="0.8"/>
+    <line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>
+    <line x1="2" y1="9" x2="6" y2="9"/><line x1="2" y1="15" x2="6" y2="15"/><line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/>
+  </symbol>
+  <symbol id="icon-ram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="8" width="18" height="8" rx="1.5"/><line x1="7" y1="8" x2="7" y2="4"/><line x1="12" y1="8" x2="12" y2="4"/><line x1="17" y1="8" x2="17" y2="4"/><line x1="7" y1="16" x2="7" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/><line x1="17" y1="16" x2="17" y2="20"/>
+  </symbol>
+  <symbol id="icon-storage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5 V19 C4 20.7 7.6 22 12 22 C16.4 22 20 20.7 20 19 V5"/><path d="M4 12 C4 13.7 7.6 15 12 15 C16.4 15 20 13.7 20 12"/>
+  </symbol>
+  <symbol id="icon-thermometer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 14.5 V4 C14 2.9 13.1 2 12 2 C10.9 2 10 2.9 10 4 V14.5 C8.8 15.2 8 16.5 8 18 C8 20.2 9.8 22 12 22 C14.2 22 16 20.2 16 18 C16 16.5 15.2 15.2 14 14.5 Z"/><circle cx="12" cy="18" r="2" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+  </symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
+  </symbol>
+  <symbol id="icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="6,9 12,15 18,9"/>
+  </symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 4 V9 H9"/><path d="M20 20 V15 H15"/><path d="M5.5 9 C7 5.5 10.2 3.5 14 3.8 C17.6 4.1 20.4 6.9 20.9 10.5"/><path d="M18.5 15 C17 18.5 13.8 20.5 10 20.2 C6.4 19.9 3.6 17.1 3.1 13.5"/>
+  </symbol>
+  <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 2 L11 13"/><path d="M22 2 L15 22 L11 13 L2 9 Z"/>
+  </symbol>
+  <symbol id="icon-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><polyline points="8,12.5 11,15.5 16,9"/>
+  </symbol>
+  <symbol id="icon-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 L22 20 H2 Z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="10" width="16" height="11" rx="2.2"/><path d="M7 10 V7 C7 4.2 9.2 2 12 2 C14.8 2 17 4.2 17 7 V10"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8 H8 L10 5 H14 L16 8 H20 C20.6 8 21 8.4 21 9 V19 C21 19.6 20.6 20 20 20 H4 C3.4 20 3 19.6 3 19 V9 C3 8.4 3.4 8 4 8 Z"/><circle cx="12" cy="14" r="4"/>
+  </symbol>
+  <symbol id="icon-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="2,12 7,12 9,5 13,19 15,12 22,12"/>
+  </symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/>
+  </symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <polygon points="6,4 20,12 6,20"/>
+  </symbol>
+  <symbol id="icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>
+  </symbol>
+  <symbol id="icon-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M5 8 C5 13 8 11 12 12 C16 13 19 11 19 16"/>
+  </symbol>
+  <symbol id="icon-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>
+  </symbol>
+  <symbol id="icon-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 8 V5 C3 3.9 3.9 3 5 3 H8"/><path d="M16 3 H19 C20.1 3 21 3.9 21 5 V8"/><path d="M21 16 V19 C21 20.1 20.1 21 19 21 H16"/><path d="M8 21 H5 C3.9 21 3 20.1 3 19 V16"/><line x1="3" y1="12" x2="21" y2="12"/>
+  </symbol>
+  <symbol id="icon-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><circle cx="7" cy="7" r="0.8" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="0.8" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 16,14"/>
+  </symbol>
+  <symbol id="icon-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="8" cy="14" r="4"/><path d="M11 11 L21 1"/><path d="M17 5 L20 8"/><path d="M14 8 L16.5 10.5"/>
+  </symbol>
+  <symbol id="icon-trend-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="3,17 10,10 14,14 21,6"/><polyline points="15,6 21,6 21,12"/>
+  </symbol>
+  <symbol id="icon-trend-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="3,7 10,14 14,10 21,18"/><polyline points="15,18 21,18 21,12"/>
+  </symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/>
+  </symbol>
+  </defs>
+</svg>
+
+<div class="app" id="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark"><svg class="icon"><use href="#icon-terminal"/></svg></span>
+      <span class="brand-text">
+        <strong>PocketLab</strong>
+        <small>Device Control Center</small>
+      </span>
+      <button class="icon-btn sidebar-collapse-btn" id="collapseBtn" aria-label="Collapse sidebar">
+        <svg class="icon"><use href="#icon-chevron-down"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav" aria-label="Primary">
+      <button class="nav-item active" data-page="overview" data-accent="brand">
+        <svg class="icon"><use href="#icon-grid"/></svg><span>Overview</span>
+      </button>
+      <button class="nav-item" data-page="device" data-accent="device">
+        <svg class="icon"><use href="#icon-device"/></svg><span>Device</span>
+      </button>
+      <button class="nav-item" data-page="network" data-accent="network">
+        <svg class="icon"><use href="#icon-network"/></svg><span>Network</span>
+      </button>
+      <button class="nav-item" data-page="security" data-accent="security">
+        <svg class="icon"><use href="#icon-shield"/></svg><span>Security Lab</span>
+      </button>
+      <button class="nav-item" data-page="iot" data-accent="iot">
+        <svg class="icon"><use href="#icon-radio"/></svg><span>IoT</span>
+      </button>
+      <button class="nav-item" data-page="command" data-accent="brand">
+        <svg class="icon"><use href="#icon-terminal"/></svg><span>Command Center</span>
+      </button>
+      <button class="nav-item" data-page="logs" data-accent="logs">
+        <svg class="icon"><use href="#icon-list"/></svg><span>Logs</span>
+      </button>
+      <button class="nav-item" data-page="ai" data-accent="ai">
+        <svg class="icon"><use href="#icon-eye"/></svg><span>AI / CV</span>
+      </button>
+      <button class="nav-item" data-page="settings" data-accent="logs">
+        <svg class="icon"><use href="#icon-settings"/></svg><span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="mini-status">
+        <span class="dot dot-online" id="miniDot"></span>
+        <span>pocketlab-phone</span>
+      </div>
+      <div class="mini-meta">CPH2239 · Android 11</div>
+    </div>
+  </aside>
+
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn mobile-only" id="menuToggle" aria-label="Open navigation">
+        <svg class="icon"><use href="#icon-menu"/></svg>
+      </button>
+
+      <div class="topbar-title">
+        <h1 id="pageTitle">Overview</h1>
+        <p id="pageSubtitle">Live snapshot of your device laboratory</p>
+      </div>
+
+      <div class="topbar-right">
+        <span class="data-mode-badge" id="dataModeBadge" title="Whether the dashboard is reading from a real PocketLab server or simulating data">
+          <span class="dot dot-warning"></span> Simulated data
+        </span>
+
+        <div class="status-pills" id="statusPills">
+          <span class="pill" id="pillPhone"><i class="dot dot-online"></i><span>Phone</span></span>
+          <span class="pill" id="pillSSH"><i class="dot dot-online"></i><span>SSH</span></span>
+          <span class="pill" id="pillIoT"><i class="dot dot-online"></i><span>IoT Agent</span></span>
+        </div>
+
+        <div class="clock" id="clock">--:--:--</div>
+      </div>
+    </header>
+
+    <main class="content" id="content">
+
+      <!-- ================= OVERVIEW ================= -->
+      <section class="page active" id="page-overview" data-accent="brand">
+        <div class="page-header">
+          <div>
+            <h2>System overview</h2>
+            <p class="muted">Everything your phone is doing, at a glance.</p>
+          </div>
+          <button class="btn btn-ghost" id="refreshOverview">
+            <svg class="icon"><use href="#icon-refresh"/></svg> Refresh
+          </button>
+        </div>
+
+        <div class="grid cards cards-6" id="statCards">
+          <!-- stat cards injected by JS -->
+        </div>
+
+        <div class="grid two-col">
+          <div class="panel" data-accent="device">
+            <div class="panel-head">
+              <h3><svg class="icon"><use href="#icon-device"/></svg> Runtime services</h3>
+            </div>
+            <div class="service-list" id="overviewServices"></div>
+          </div>
+
+          <div class="panel" data-accent="logs">
+            <div class="panel-head">
+              <h3><svg class="icon"><use href="#icon-list"/></svg> Recent activity</h3>
+              <button class="btn btn-text" data-nav="logs">View all</button>
+            </div>
+            <div class="log-stream compact" id="overviewLogs"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= DEVICE ================= -->
+      <section class="page" id="page-device" data-accent="device">
+        <div class="page-header">
+          <div>
+            <h2>Device laboratory</h2>
+            <p class="muted">Everything about the phone this lab runs on.</p>
+          </div>
+          <span class="badge badge-online"><i class="dot dot-online"></i> Online</span>
+        </div>
+
+        <div class="grid two-col">
+          <div class="panel" data-accent="device">
+            <div class="panel-head"><h3><svg class="icon"><use href="#icon-device"/></svg> Identity</h3></div>
+            <dl class="kv-list">
+              <div><dt>Device</dt><dd>CPH2239</dd></div>
+              <div><dt>Android</dt><dd>11</dd></div>
+              <div><dt>Architecture</dt><dd>ARM64</dd></div>
+              <div><dt>Kernel</dt><dd>4.19.127+</dd></div>
+              <div><dt>Uptime</dt><dd id="deviceUptime">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel" data-accent="brand">
+            <div class="panel-head"><h3><svg class="icon"><use href="#icon-battery"/></svg> Battery</h3></div>
+            <dl class="kv-list">
+              <div><dt>Percentage</dt><dd id="battPct">75%</dd></div>
+              <div><dt>Temperature</dt><dd id="battTemp">30.4°C</dd></div>
+              <div><dt>Charging</dt><dd id="battCharging">No</dd></div>
+              <div><dt>Health</dt><dd>Good</dd></div>
+              <div><dt>Voltage</dt><dd id="battVoltage">3.98 V</dd></div>
+              <div><dt>Current</dt><dd id="battCurrent">−312 mA</dd></div>
+            </dl>
+          </div>
+        </div>
+
+        <div class="panel" data-accent="device">
+          <div class="panel-head"><h3><svg class="icon"><use href="#icon-cpu"/></svg> Resources</h3></div>
+          <div class="resource-bars" id="resourceBars"></div>
+        </div>
+
+        <div class="panel" data-accent="device">
+          <div class="panel-head"><h3><svg class="icon"><use href="#icon-terminal"/></svg> Runtime</h3></div>
+          <div class="service-list" id="deviceServices"></div>
+        </div>
+
+        <div class="panel" data-accent="logs">
+          <div class="panel-head"><h3><svg class="icon"><use href="#icon-clock"/></svg> Timeline</h3></div>
+          <div class="log-stream" id="deviceTimeline"></div>
+        </div>
+      </section>
+
+      <!-- ================= NETWORK ================= -->
+      <section class="page" id="page-network" data-accent="network">
+        <div class="page-header">
+          <div>
+            <h2>Network</h2>
+            <p class="muted">Discovery, connectivity, throughput &amp; latency.</p>
+          </div>
+        </div>
+
+        <div class="grid cards cards-4" id="networkCards"></div>
+
+        <div class="panel" data-accent="network">
+          <div class="panel-head"><h3><svg class="icon"><use href="#icon-scan"/></svg> Tools</h3></div>
+          <div class="tool-grid">
+            <button class="tool-btn" data-tool="ping"><svg class="icon"><use href="#icon-pulse"/></svg>Ping</button>
+            <button class="tool-btn" data-tool="traceroute"><svg class="icon"><use href="#icon-route"/></svg>Traceroute</button>
+            <button class="tool-btn" data-tool="dns"><svg class="icon"><use href="#icon-globe"/></svg>DNS Lookup</button>
+            <button class="tool-btn" data-tool="portscan"><svg class="icon"><use href="#icon-scan"/></svg>Port Scan</button>
+            <button class="tool-btn" data-tool="servicescan"><svg class="icon"><use href="#icon-server"/></svg>Service Scan</button>
+          </div>
+
+          <div class="tool-output" id="networkToolOutput">
+            <div class="tool-output-empty">Run a tool above to see results here.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SECURITY ================= -->
+      <section class="page" id="page-security" data-accent="security">
+        <div class="page-header">
+          <div>
+            <h2>Security lab</h2>
+            <p class="muted">Host scanning, exposed services and SSH posture.</p>
+          </div>
+          <span class="badge badge-warning"><i class="dot dot-warning"></i> 2 ports open</span>
+        </div>
+
+        <div class="grid cards cards-4" id="securityCards"></div>
+
+        <div class="grid two-col">
+          <div class="panel" data-accent="security">
+            <div class="panel-head"><h3><svg class="icon"><use href="#icon-server"/></svg> Services</h3></div>
+            <table class="table" id="servicesTable"></table>
+          </div>
+
+          <div class="panel" data-accent="security">
+            <div class="panel-head"><h3><svg class="icon"><use href="#icon-key"/></svg> SSH</h3></div>
+            <dl class="kv-list">
+              <div><dt>Version</dt><dd>OpenSSH 10.3</dd></div>
+              <div><dt>Port</dt><dd>22</dd></div>
+              <div><dt>Auth methods</dt><dd>publickey, password</dd></div>
+              <div><dt>Root login</dt><dd>Not browser-verifiable</dd></div>
+              <div><dt>Forwarding</dt><dd>Enabled</dd></div>
+            </dl>
+          </div>
+        </div>
+
+        <div class="panel" data-accent="security">
+          <div class="panel-head"><h3>Raw technical output</h3><span class="muted small">Human summary above, raw detail below</span></div>
+          <div class="accordion" id="securityAccordion">
+            <details open>
+              <summary>SSH configuration</summary>
+              <pre class="mono-block">Dashboard note:
+SSH runs outside the browser security boundary.
+Use the Termux server / SSH client for authoritative SSH posture.</pre>
+            </details>
+            <details>
+              <summary>Authentication methods</summary>
+              <pre class="mono-block">Authoritative SSH configuration is not exposed by the PocketLab HTTP API.</pre>
+            </details>
+            <details>
+              <summary>Forwarding &amp; gateway ports</summary>
+              <pre class="mono-block">Forwarding configuration is not exposed by the PocketLab HTTP API.</pre>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= IOT ================= -->
+      <section class="page" id="page-iot" data-accent="iot">
+        <div class="page-header">
+          <div>
+            <h2>IoT devices</h2>
+            <p class="muted">Everything paired with this lab.</p>
+          </div>
+        </div>
+
+        <div class="iot-layout">
+          <div class="panel iot-list-panel" data-accent="iot">
+            <div class="panel-head"><h3>Devices</h3></div>
+            <div class="device-list" id="iotDeviceList"></div>
+          </div>
+
+          <div class="panel iot-detail-panel" data-accent="iot" id="iotDetailPanel">
+            <!-- filled by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= COMMAND CENTER ================= -->
+      <section class="page" id="page-command" data-accent="brand">
+        <div class="page-header">
+          <div>
+            <h2>Command center</h2>
+            <p class="muted">Send safe, predefined commands to a paired device.</p>
+          </div>
+        </div>
+
+        <div class="panel" data-accent="brand">
+          <div class="command-form">
+            <label class="field">
+              <span>Device</span>
+              <select id="cmdDevice">
+                <option value="pocketlab-phone">pocketlab-phone</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Command</span>
+              <select id="cmdCommand">
+                <option value="status">status</option>
+                <option value="network">network</option>
+                <option value="battery">battery</option>
+                <option value="ping">ping</option>
+                <option value="restart-agent">restart-agent</option>
+              </select>
+            </label>
+            <button class="btn btn-primary" id="cmdSend">
+              <svg class="icon"><use href="#icon-send"/></svg> Send
+            </button>
+          </div>
+          <p class="hint"><svg class="icon icon-sm"><use href="#icon-lock"/></svg> Only predefined, safe commands are exposed here on purpose — no arbitrary shell execution.</p>
+
+          <div class="tool-output" id="cmdOutput">
+            <div class="tool-output-empty">Send a command to see the result.</div>
+          </div>
+        </div>
+
+        <div class="panel" data-accent="logs">
+          <div class="panel-head"><h3>Command history</h3></div>
+          <div class="log-stream" id="cmdHistory"></div>
+        </div>
+      </section>
+
+      <!-- ================= LOGS ================= -->
+      <section class="page" id="page-logs" data-accent="logs">
+        <div class="page-header">
+          <div>
+            <h2>Logs</h2>
+            <p class="muted">A global event stream across every subsystem.</p>
+          </div>
+          <button class="btn btn-ghost" id="logStreamToggle">
+            <svg class="icon"><use href="#icon-pause"/></svg> <span>Pause</span>
+          </button>
+        </div>
+
+        <div class="log-toolbar">
+          <div class="chip-row" id="logFilters">
+            <button class="chip active" data-filter="ALL">All</button>
+            <button class="chip" data-filter="INFO">Info</button>
+            <button class="chip" data-filter="WARN">Warning</button>
+            <button class="chip" data-filter="ERROR">Error</button>
+            <button class="chip" data-filter="SECURITY">Security</button>
+            <button class="chip" data-filter="IOT">IoT</button>
+            <button class="chip" data-filter="NETWORK">Network</button>
+          </div>
+          <label class="field field-search">
+            <svg class="icon icon-sm"><use href="#icon-search"/></svg>
+            <input type="text" id="logSearch" placeholder="Filter by text…">
+          </label>
+        </div>
+
+        <div class="panel" data-accent="logs">
+          <div class="log-stream full" id="fullLogStream"></div>
+        </div>
+      </section>
+
+      <!-- ================= AI / CV ================= -->
+      <section class="page" id="page-ai" data-accent="ai">
+        <div class="page-header">
+          <div>
+            <h2>AI &amp; computer vision</h2>
+            <p class="muted">Stage 7 — live Computer Vision, command execution &amp; local reasoning.</p>
+          </div>
+          <span class="badge badge-ai">Live · Stage 7</span>
+        </div>
+
+        <div class="grid two-col">
+          <div class="panel ai-viewport-panel" data-accent="ai">
+            <div class="ai-viewport" id="aiViewport">
+              <div class="ai-viewport-empty" id="aiEmptyState">
+                <svg class="icon icon-lg"><use href="#icon-camera"/></svg>
+                <p>Laptop CV agent provides the live gesture feed</p>
+                <button class="btn btn-primary" id="aiEnableCamera">Enable browser preview</button>
+              </div>
+              <video id="aiVideo" playsinline muted></video>
+              <div class="ai-overlay" id="aiOverlay"></div>
+              <div class="ai-scan-corners">
+                <span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" data-accent="ai">
+            <div class="panel-head"><h3>Inference</h3></div>
+            <dl class="kv-list">
+              <div><dt>CV Agent</dt><dd id="aiCameraStatus">Waiting</dd></div>
+              <div><dt>Reasoner</dt><dd>PocketLab Local Reasoner</dd></div>
+              <div><dt>Risk</dt><dd id="aiFps">—</dd></div>
+              <div><dt>Latest action</dt><dd id="aiConfidence">—</dd></div>
+            </dl>
+            <div class="panel-head"><h3>Detected</h3></div>
+            <div class="chip-row" id="aiDetected">
+              <span class="chip static">Waiting for CV event</span>
+            </div>
+            <div class="panel-head" style="margin-top:18px;"><h3>Reasoning</h3></div>
+            <div id="aiInterpretation" class="mono-block">Waiting for live PocketLab context…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SETTINGS ================= -->
+      <section class="page" id="page-settings" data-accent="logs">
+        <div class="page-header">
+          <div>
+            <h2>Settings</h2>
+            <p class="muted">Configure this dashboard and its connection to your PocketLab server.</p>
+          </div>
+        </div>
+
+        <div class="panel" data-accent="brand">
+          <div class="panel-head"><h3>Connection</h3></div>
+          <div class="settings-grid">
+            <label class="field">
+              <span>PocketLab API base URL</span>
+              <input type="text" id="settingApiBase" placeholder="Automatic: use the server that delivered this dashboard">
+            </label>
+            <button class="btn btn-ghost" id="settingTestConnection">Test connection</button>
+          </div>
+          <p class="hint"><svg class="icon icon-sm"><use href="#icon-radio"/></svg> Automatic mode uses the current PocketLab server origin, so no phone IP needs to be changed between sessions.</p>
+        </div>
+
+        <div class="panel" data-accent="logs">
+          <div class="panel-head"><h3>General</h3></div>
+          <div class="settings-grid">
+            <label class="field">
+              <span>Device name</span>
+              <input type="text" id="settingDeviceName" value="pocketlab-phone">
+            </label>
+            <label class="field field-inline">
+              <span>Network discovery</span>
+              <span class="toggle"><input type="checkbox" id="settingDiscovery" checked><i></i></span>
+            </label>
+            <label class="field">
+              <span>Telemetry interval <b id="telemetryIntervalVal">2s</b></span>
+              <input type="range" id="settingTelemetryInterval" min="1" max="30" value="2">
+            </label>
+            <label class="field">
+              <span>IoT polling interval <b id="iotIntervalVal">5s</b></span>
+              <input type="range" id="settingIotInterval" min="1" max="60" value="5">
+            </label>
+            <label class="field">
+              <span>Server port</span>
+              <input type="number" id="settingPort" value="3000">
+            </label>
+            <label class="field field-inline">
+              <span>Verbose logging</span>
+              <span class="toggle"><input type="checkbox" id="settingLogging"><i></i></span>
+            </label>
+            <label class="field field-inline">
+              <span>Confirm commands before sending</span>
+              <span class="toggle"><input type="checkbox" id="settingAuth" checked><i></i></span>
+            </label>
+          </div>
+          <button class="btn btn-primary" id="settingsSave">Save settings</button>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <span>PocketLab · local device laboratory</span>
+      <span class="app-footer-dot">·</span>
+      <span id="footerConnectionLabel">Connected to the live PocketLab server</span>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

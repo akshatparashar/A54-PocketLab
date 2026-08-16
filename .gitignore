@@ -1,5 +1,26 @@
-node_modules/
-.env
-*.log
-__pycache__/
+# Python
 .venv/
+__pycache__/
+*.py[cod]
+*.class
+
+# Node
+server/node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime logs
+*.log
+
+# Runtime data
+*.tmp
+*.cache
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
