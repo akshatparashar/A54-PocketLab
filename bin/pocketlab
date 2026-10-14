@@ -1,0 +1,513 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# pocketlab — control PocketLab on the phone (Termux).
+#
+#   pocketlab up           start sshd, server and IoT agent if they are not running
+#   pocketlab down         stop server and agent (sshd is left alone)
+#   pocketlab restart      down + up
+#   pocketlab status       show what is running and the dashboard URLs
+#   pocketlab logs [server|agent] [-f]
+#   pocketlab update       git pull + npm install + restart
+#   pocketlab doctor       check dependencies and autostart setup
+#   pocketlab autostart enable|disable|status
+#
+# Every start is idempotent: running `up` many times never creates duplicates.
+# Server and agent run under a small supervisor loop that restarts them if
+# they crash, detached from the terminal so closing SSH/Termux does not stop them.
+
+set -u
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+POCKETLAB_HOME="${POCKETLAB_HOME:-$(cd "$(dirname "$SELF")/.." && pwd)}"
+RUN_DIR="$POCKETLAB_HOME/run"
+LOG_DIR="$POCKETLAB_HOME/logs"
+PORT="${POCKETLAB_PORT:-3000}"
+API="http://127.0.0.1:$PORT"
+JOB_ID=4271
+HOOK_FILE="$HOME/.pocketlab-autostart.sh"
+HOOK_LINE='[ -f "$HOME/.pocketlab-autostart.sh" ] && . "$HOME/.pocketlab-autostart.sh"'
+BOOT_FILE="$HOME/.termux/boot/pocketlab"
+MAX_LOG_BYTES=$((4 * 1024 * 1024))
+
+mkdir -p "$RUN_DIR" "$LOG_DIR"
+
+export POCKETLAB_HOME
+export POCKETLAB_DATA_DIR="${POCKETLAB_DATA_DIR:-$POCKETLAB_HOME/server}"
+
+if [ -t 1 ]; then
+    G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; C=$'\e[36m'; D=$'\e[2m'; B=$'\e[1m'; N=$'\e[0m'
+else
+    G=""; Y=""; R=""; C=""; D=""; B=""; N=""
+fi
+
+ok()   { echo "  ${G}●${N} $*"; }
+warn() { echo "  ${Y}●${N} $*"; }
+bad()  { echo "  ${R}●${N} $*"; }
+info() { echo "  ${D}$*${N}"; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# ------------------------------------------------------------
+# process helpers
+# ------------------------------------------------------------
+
+pid_alive() {
+    local pid="$1" match="${2:-}"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    if [ -n "$match" ] && [ -r "/proc/$pid/cmdline" ]; then
+        tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q -- "$match" || return 1
+    fi
+    return 0
+}
+
+supervisor_pid() {
+    local pid
+    pid="$(cat "$RUN_DIR/$1.supervisor.pid" 2>/dev/null)"
+    if pid_alive "$pid" "_supervise $1"; then
+        echo "$pid"
+    fi
+}
+
+http_code() {
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time "${2:-3}" "$API$1" 2>/dev/null)"
+    echo "${code:-000}"
+}
+
+server_healthy() {
+    curl -s --max-time 3 "$API/api/health" 2>/dev/null | grep -q '"service":"PocketLab"'
+}
+
+port_in_use() {
+    [ "$(http_code / 2)" != "000" ]
+}
+
+rotate_log() {
+    local file="$1" size
+    [ -f "$file" ] || return 0
+    size="$(wc -c < "$file" 2>/dev/null || echo 0)"
+    if [ "${size:-0}" -gt "$MAX_LOG_BYTES" ]; then
+        cp "$file" "$file.1" 2>/dev/null
+        : > "$file"
+    fi
+}
+
+wake_lock() {
+    have termux-wake-lock && termux-wake-lock >/dev/null 2>&1
+}
+
+detach() {
+    # detach LOGFILE CMD...  — fully detached from this terminal/session
+    local logfile="$1"
+    shift
+    if have setsid; then
+        nohup setsid "$@" >>"$logfile" 2>&1 </dev/null &
+    else
+        nohup "$@" >>"$logfile" 2>&1 </dev/null &
+    fi
+    disown 2>/dev/null || true
+}
+
+# ------------------------------------------------------------
+# supervisor (internal): keeps one service alive
+# ------------------------------------------------------------
+
+cmd_supervise() {
+    local name="$1"
+    shift
+    local logfile="$LOG_DIR/$name.log"
+    local child="" backoff=3 started
+
+    echo "$$" > "$RUN_DIR/$name.supervisor.pid"
+
+    stop_child() {
+        if [ -n "$child" ]; then
+            kill "$child" 2>/dev/null
+            wait "$child" 2>/dev/null
+        fi
+        [ "$(cat "$RUN_DIR/$name.supervisor.pid" 2>/dev/null)" = "$$" ] && rm -f "$RUN_DIR/$name.supervisor.pid"
+        rm -f "$RUN_DIR/$name.pid"
+        echo "[$(date -Iseconds)] [supervisor] $name stopped." >> "$logfile"
+        exit 0
+    }
+    trap stop_child TERM INT HUP
+
+    while true; do
+        if [ "$name" = "server" ] && server_healthy; then
+            # Another PocketLab server already answers on the port.
+            sleep 30 &
+            wait $!
+            continue
+        fi
+
+        rotate_log "$logfile"
+        echo "[$(date -Iseconds)] [supervisor] starting $name: $*" >> "$logfile"
+        started="$(date +%s)"
+        "$@" >> "$logfile" 2>&1 </dev/null &
+        child=$!
+        echo "$child" > "$RUN_DIR/$name.pid"
+        wait "$child"
+        local code=$?
+        child=""
+        echo "[$(date -Iseconds)] [supervisor] $name exited with code $code" >> "$logfile"
+
+        if [ $(( $(date +%s) - started )) -lt 20 ]; then
+            backoff=$(( backoff * 2 ))
+            [ "$backoff" -gt 60 ] && backoff=60
+        else
+            backoff=3
+        fi
+        sleep "$backoff" &
+        wait $!
+    done
+}
+
+# ------------------------------------------------------------
+# start / stop
+# ------------------------------------------------------------
+
+ensure_node_modules() {
+    if [ ! -d "$POCKETLAB_HOME/server/node_modules/express" ]; then
+        echo "  Installing server dependencies (first run)…"
+        (cd "$POCKETLAB_HOME/server" && npm install --omit=dev --no-audit --no-fund >>"$LOG_DIR/npm.log" 2>&1) ||
+            bad "npm install failed — see $LOG_DIR/npm.log"
+    fi
+}
+
+stop_legacy_server() {
+    # A pre-2.0 server (no /api/health) holding the port: replace it.
+    if port_in_use && ! server_healthy; then
+        info "Replacing an older PocketLab server on port $PORT…"
+        pkill -f "node .*pocketlab/server/server\.js" 2>/dev/null
+        sleep 1
+    fi
+}
+
+start_sshd() {
+    [ "${POCKETLAB_AUTOSTART_SSHD:-1}" = "0" ] && return 0
+    have sshd || return 0
+    if ! pgrep -x sshd >/dev/null 2>&1; then
+        sshd 2>/dev/null && STARTED+=("sshd")
+    fi
+}
+
+start_server() {
+    if [ -n "$(supervisor_pid server)" ]; then
+        return 0
+    fi
+    have node || { bad "node is not installed — run: pkg install nodejs"; return 1; }
+    ensure_node_modules
+    stop_legacy_server
+    detach /dev/null bash "$SELF" _supervise server node "$POCKETLAB_HOME/server/server.js"
+    STARTED+=("server")
+}
+
+start_agent() {
+    if [ -n "$(supervisor_pid agent)" ]; then
+        return 0
+    fi
+    # Stop agents started by older launchers so commands are not run twice.
+    pkill -f "pocketlab/iot/telemetry-agent\.sh" 2>/dev/null
+    detach /dev/null bash "$SELF" _supervise agent bash "$POCKETLAB_HOME/iot/telemetry-agent.sh"
+    STARTED+=("agent")
+}
+
+cmd_up() {
+    local mode="${1:-}"
+    STARTED=()
+
+    rotate_log "$LOG_DIR/server.log"
+    rotate_log "$LOG_DIR/agent.log"
+
+    start_sshd
+    start_server
+    start_agent
+
+    if [ "${#STARTED[@]}" -gt 0 ]; then
+        wake_lock
+    fi
+
+    # Wait for the API (briefly in login/job mode).
+    local tries=20
+    [ "$mode" = "--login" ] && tries=12
+    [ "$mode" = "--job" ] && tries=10
+    local i=0
+    while ! server_healthy && [ "$i" -lt "$tries" ]; do
+        sleep 0.5
+        i=$((i + 1))
+    done
+
+    case "$mode" in
+        --job)
+            return 0
+            ;;
+        --login)
+            local state
+            if server_healthy; then
+                state="${G}online${N}"
+            else
+                state="${Y}starting…${N}"
+            fi
+            local started=""
+            [ "${#STARTED[@]}" -gt 0 ] && started=" ${D}(started: ${STARTED[*]})${N}"
+            echo "${C}⚡ PocketLab${N} $state$started"
+            print_urls "   "
+            ;;
+        *)
+            if [ "${#STARTED[@]}" -gt 0 ]; then
+                echo "Started: ${STARTED[*]}"
+            else
+                echo "Everything was already running."
+            fi
+            cmd_status
+            ;;
+    esac
+}
+
+cmd_down() {
+    local name pid
+    for name in agent server; do
+        pid="$(supervisor_pid "$name")"
+        if [ -n "$pid" ]; then
+            kill "$pid" 2>/dev/null
+        fi
+    done
+    sleep 1
+    pkill -f "pocketlab/iot/telemetry-agent\.sh" 2>/dev/null
+    pkill -f "node .*pocketlab/server/server\.js" 2>/dev/null
+    rm -f "$RUN_DIR"/*.pid
+    echo "PocketLab server and agent stopped. (sshd left running)"
+    if have termux-wake-unlock && ! pgrep -x sshd >/dev/null 2>&1; then
+        termux-wake-unlock >/dev/null 2>&1
+    fi
+}
+
+# ------------------------------------------------------------
+# status
+# ------------------------------------------------------------
+
+json_value() {
+    # json_value KEY < json   (first string value)
+    grep -o "\"$1\":\"[^\"]*\"" | head -n 1 | cut -d'"' -f4
+}
+
+print_urls() {
+    local indent="${1:-  }" snapshot lan ts
+    snapshot="$(curl -s --max-time 4 "$API/api/telemetry" 2>/dev/null)"
+    lan="$(printf '%s' "$snapshot" | json_value ip)"
+    ts="$(printf '%s' "$snapshot" | json_value tailscaleIp)"
+
+    if [ -z "$lan$ts" ] && have ifconfig; then
+        lan="$(ifconfig wlan0 2>/dev/null | grep -o 'inet [0-9.]*' | awk '{print $2}' | head -n 1)"
+        ts="$(ifconfig 2>/dev/null | grep -o 'inet 100\.[0-9.]*' | awk '{print $2}' | head -n 1)"
+    fi
+
+    [ -n "$ts" ] && echo "${indent}Tailscale: ${B}http://$ts:$PORT/dashboard/${N}"
+    [ -n "$lan" ] && echo "${indent}Wi-Fi:     http://$lan:$PORT/dashboard/"
+    [ -z "$lan$ts" ] && echo "${indent}Dashboard: http://<phone-ip>:$PORT/dashboard/"
+}
+
+cmd_status() {
+    echo
+    echo "${B}PocketLab${N}  ${D}$POCKETLAB_HOME${N}"
+
+    if pgrep -x sshd >/dev/null 2>&1; then
+        ok "sshd        running (port 8022)"
+    else
+        bad "sshd        not running  → run: sshd"
+    fi
+
+    local sp version
+    sp="$(supervisor_pid server)"
+    if server_healthy; then
+        version="$(curl -s --max-time 3 "$API/api/health" | json_value version)"
+        if [ -n "$sp" ]; then
+            ok "server      online v${version:-?} (supervised, auto-restart)"
+        else
+            warn "server      online v${version:-?} (not supervised — run: pocketlab restart)"
+        fi
+    elif [ -n "$sp" ]; then
+        warn "server      starting / restarting — see: pocketlab logs server"
+    elif port_in_use; then
+        warn "server      an older PocketLab server holds port $PORT — run: pocketlab restart"
+    else
+        bad "server      stopped  → run: pocketlab up"
+    fi
+
+    if [ -n "$(supervisor_pid agent)" ]; then
+        local safe=""
+        [ -f "$RUN_DIR/safe-mode" ] && safe=" ${Y}[software safe state]${N}"
+        ok "IoT agent   running$safe"
+    elif pgrep -f "telemetry-agent\.sh" >/dev/null 2>&1; then
+        warn "IoT agent   running (old launcher — run: pocketlab restart)"
+    else
+        bad "IoT agent   stopped  → run: pocketlab up"
+    fi
+
+    if [ -f "$HOOK_FILE" ]; then
+        ok "autostart   on (Termux open / SSH login + 15-min watchdog job)"
+    else
+        warn "autostart   off → run: pocketlab autostart enable"
+    fi
+
+    echo
+    print_urls "  "
+    echo
+}
+
+cmd_logs() {
+    local name="${1:-server}"
+    shift || true
+    local file="$LOG_DIR/$name.log"
+    [ -f "$file" ] || { echo "No log yet: $file"; return 1; }
+    if [ "${1:-}" = "-f" ]; then
+        tail -n 50 -f "$file"
+    else
+        tail -n 80 "$file"
+    fi
+}
+
+# ------------------------------------------------------------
+# autostart
+# ------------------------------------------------------------
+
+add_line_once() {
+    local file="$1" line="$2"
+    touch "$file"
+    grep -qF "$line" "$file" 2>/dev/null || printf '\n# PocketLab autostart\n%s\n' "$line" >> "$file"
+}
+
+remove_line() {
+    local file="$1" line="$2"
+    [ -f "$file" ] || return 0
+    grep -vF "$line" "$file" | grep -v '^# PocketLab autostart$' > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
+autostart_enable() {
+    cat > "$HOOK_FILE" <<EOF
+# Generated by 'pocketlab autostart enable'. Runs once per interactive shell
+# (opening Termux or logging in with 'ssh pocketlab') and starts PocketLab.
+if [ -z "\${POCKETLAB_AUTOSTART_DONE:-}" ] && [ -x "$POCKETLAB_HOME/bin/pocketlab" ]; then
+    export POCKETLAB_AUTOSTART_DONE=1
+    case "\$-" in
+        *i*) "$POCKETLAB_HOME/bin/pocketlab" up --login ;;
+    esac
+fi
+EOF
+
+    # Login shells (SSH, Termux) read the first of these that exists.
+    add_line_once "$HOME/.bashrc" "$HOOK_LINE"
+    if [ -f "$HOME/.bash_profile" ]; then
+        add_line_once "$HOME/.bash_profile" "$HOOK_LINE"
+    elif [ -f "$HOME/.bash_login" ]; then
+        add_line_once "$HOME/.bash_login" "$HOOK_LINE"
+    elif [ -f "$HOME/.profile" ]; then
+        add_line_once "$HOME/.profile" "$HOOK_LINE"
+    else
+        printf '# Created by PocketLab: load ~/.bashrc in login shells too.\n[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"\n' > "$HOME/.bash_profile"
+    fi
+    echo "  ✓ login hook (~/.bashrc, login profile)"
+
+    if have termux-job-scheduler; then
+        if run_timeout 15 termux-job-scheduler --job-id "$JOB_ID" --script "$POCKETLAB_HOME/bin/pocketlab-job" \
+            --period-ms 900000 --persisted true --network none >/dev/null 2>&1; then
+            echo "  ✓ termux-job-scheduler job #$JOB_ID every 15 min"
+        else
+            echo "  ! termux-job-scheduler failed (is the Termux:API app installed?)"
+        fi
+    else
+        echo "  ! termux-job-scheduler not found — pkg install termux-api"
+    fi
+
+    mkdir -p "$(dirname "$BOOT_FILE")"
+    cat > "$BOOT_FILE" <<EOF
+#!/data/data/com.termux/files/usr/bin/sh
+# Started by the Termux:Boot app after the phone boots (if installed).
+termux-wake-lock
+exec "$POCKETLAB_HOME/bin/pocketlab" up --job
+EOF
+    chmod +x "$BOOT_FILE"
+    echo "  ✓ Termux:Boot script (used if the Termux:Boot app is installed)"
+}
+
+autostart_disable() {
+    rm -f "$HOOK_FILE" "$BOOT_FILE"
+    for file in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        remove_line "$file" "$HOOK_LINE"
+    done
+    have termux-job-scheduler && run_timeout 15 termux-job-scheduler --cancel --job-id "$JOB_ID" >/dev/null 2>&1
+    echo "PocketLab autostart disabled."
+}
+
+run_timeout() {
+    local seconds="$1"
+    shift
+    if have timeout; then timeout "$seconds" "$@"; else "$@"; fi
+}
+
+cmd_autostart() {
+    case "${1:-status}" in
+        enable) autostart_enable ;;
+        disable) autostart_disable ;;
+        *)
+            [ -f "$HOOK_FILE" ] && echo "Login hook: on" || echo "Login hook: off"
+            have termux-job-scheduler && run_timeout 15 termux-job-scheduler -p 2>/dev/null
+            ;;
+    esac
+}
+
+# ------------------------------------------------------------
+# doctor / update
+# ------------------------------------------------------------
+
+cmd_doctor() {
+    echo "${B}PocketLab doctor${N}"
+    local cmd
+    for cmd in node npm curl sshd pgrep git; do
+        if have "$cmd"; then ok "$cmd"; else bad "$cmd missing"; fi
+    done
+    for cmd in termux-battery-status termux-wifi-connectioninfo termux-vibrate termux-job-scheduler termux-wake-lock; do
+        if have "$cmd"; then ok "$cmd"; else warn "$cmd missing → pkg install termux-api"; fi
+    done
+    if have termux-battery-status; then
+        if run_timeout 8 termux-battery-status 2>/dev/null | grep -q percentage; then
+            ok "Termux:API app responds (battery readable)"
+        else
+            bad "Termux:API app not responding — install 'Termux:API' from the same store as Termux (F-Droid/GitHub)"
+        fi
+    fi
+    [ -d "$POCKETLAB_HOME/server/node_modules/express" ] && ok "server dependencies installed" || warn "server dependencies missing (pocketlab up installs them)"
+    echo
+    echo "Android tips: Settings → Battery → Termux → 'Don't optimize' / allow background activity,"
+    echo "and keep the Termux notification (wake lock) so ColorOS does not kill the server."
+    cmd_status
+}
+
+cmd_update() {
+    if [ -d "$POCKETLAB_HOME/.git" ]; then
+        git -C "$POCKETLAB_HOME" pull --ff-only || { bad "git pull failed"; return 1; }
+    fi
+    (cd "$POCKETLAB_HOME/server" && npm install --omit=dev --no-audit --no-fund)
+    chmod +x "$POCKETLAB_HOME"/bin/* "$POCKETLAB_HOME"/iot/*.sh "$POCKETLAB_HOME"/server/*.sh "$POCKETLAB_HOME"/ssh/*.sh 2>/dev/null
+    cmd_down
+    cmd_up
+}
+
+usage() {
+    sed -n '3,14p' "$SELF" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-status}" in
+    up|start) shift; cmd_up "${1:-}" ;;
+    down|stop) cmd_down ;;
+    restart) cmd_down; sleep 1; cmd_up ;;
+    status) cmd_status ;;
+    logs|log) shift; cmd_logs "$@" ;;
+    update) cmd_update ;;
+    doctor) cmd_doctor ;;
+    autostart) shift; cmd_autostart "${1:-status}" ;;
+    _supervise) shift; cmd_supervise "$@" ;;
+    -h|--help|help) usage ;;
+    *) usage; exit 1 ;;
+esac

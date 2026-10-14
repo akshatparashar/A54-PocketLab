@@ -1,0 +1,5 @@
+{
+  "_comment": "Optional. Copy to pocketlab.config.json. hand_tracking.py normally finds the phone by itself (LAN discovery, then the HostName of 'Host pocketlab' in ~/.ssh/config).",
+  "apiBase": "",
+  "fallbackHosts": ["100.82.17.93"]
+}

@@ -24,3 +24,14 @@ server/node_modules/
 Thumbs.db
 .vscode/
 .idea/
+
+# PocketLab runtime state (phone)
+run/
+logs/
+server/cv-history.json
+server/command-history.json
+server/*.json.tmp
+server/*.corrupt-*
+
+# Local laptop config
+pocketlab.config.json

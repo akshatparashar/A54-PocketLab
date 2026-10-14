@@ -1,0 +1,4 @@
+# Laptop gesture agent (hand_tracking.py)
+opencv-python>=4.8
+mediapipe>=0.10.9
+requests>=2.31

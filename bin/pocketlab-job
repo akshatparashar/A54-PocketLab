@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Run by termux-job-scheduler every 15 minutes (and by Termux:Boot):
+# restarts anything that Android killed. Safe to run any number of times.
+exec bash "$(dirname "$(readlink -f "$0")")/pocketlab" up --job
