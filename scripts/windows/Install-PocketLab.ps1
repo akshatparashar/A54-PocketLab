@@ -177,15 +177,21 @@ if (-not $NoProfileHook) {
         Ok "Updated $profilePath"
     }
 
-    $policy = Get-ExecutionPolicy -Scope CurrentUser
-    $effective = Get-ExecutionPolicy
-    if ($effective -eq 'Restricted' -or $effective -eq 'AllSigned') {
-        if ($policy -eq 'Undefined' -or $policy -eq 'Restricted') {
+    # Check the persistent policy (ignore -ExecutionPolicy Bypass used to run
+    # this script, which only applies to this process).
+    $machine = Get-ExecutionPolicy -Scope LocalMachine
+    $userPolicy = Get-ExecutionPolicy -Scope CurrentUser
+    $groupPolicy = @('MachinePolicy', 'UserPolicy') | ForEach-Object { Get-ExecutionPolicy -Scope $_ } | Where-Object { $_ -ne 'Undefined' } | Select-Object -First 1
+    $persistent = if ($groupPolicy) { $groupPolicy } elseif ($userPolicy -ne 'Undefined') { $userPolicy } elseif ($machine -ne 'Undefined') { $machine } else { 'Restricted' }
+    if ($persistent -eq 'Restricted' -or $persistent -eq 'AllSigned') {
+        if ($groupPolicy) {
+            Warn "Execution policy is set by Group Policy ($groupPolicy) - the profile hook won't load, but ssh LocalCommand still works."
+        } else {
             Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
             Ok 'Set PowerShell execution policy to RemoteSigned for your user so the profile can load.'
-        } else {
-            Warn "Execution policy is $effective - the profile hook may not load (ssh LocalCommand still works)."
         }
+    } else {
+        Ok "Execution policy ($persistent) lets the profile load"
     }
 }
 
