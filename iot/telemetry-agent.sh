@@ -266,13 +266,23 @@ result_vibrate() {
         return 1
     fi
 
-    if run_timeout 8 termux-vibrate -d 500 -f >/dev/null 2>&1; then
-        printf '{"device":%s,"action":"vibrate","durationMs":500,"timestamp":%s}' \
-            "$(json_str "$DEVICE_ID")" "$(json_str "$(now_iso)")"
+    # Three strong pulses + a toast: one short buzz is easy to miss.
+    local ok=0 i
+    for i in 1 2 3; do
+        if run_timeout 8 termux-vibrate -d 900 -f </dev/null >/dev/null 2>&1; then
+            ok=$((ok + 1))
+        fi
+        sleep 1.3
+    done
+    run_timeout 8 termux-toast -g middle "PocketLab: here I am!" </dev/null >/dev/null 2>&1 &
+
+    if [ "$ok" -gt 0 ]; then
+        printf '{"device":%s,"action":"vibrate","pulses":%s,"durationMs":900,"note":"If you felt nothing, check that vibration is allowed for Termux:API and the phone is not in total silence / Do Not Disturb.","timestamp":%s}' \
+            "$(json_str "$DEVICE_ID")" "$ok" "$(json_str "$(now_iso)")"
         return 0
     fi
 
-    printf '{"device":%s,"error":"termux-vibrate failed (install Termux:API)","timestamp":%s}' \
+    printf '{"device":%s,"error":"termux-vibrate failed or timed out (Termux:API app missing, or blocked by battery restrictions)","timestamp":%s}' \
         "$(json_str "$DEVICE_ID")" "$(json_str "$(now_iso)")"
     return 1
 }

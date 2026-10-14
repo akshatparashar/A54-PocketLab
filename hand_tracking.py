@@ -66,6 +66,7 @@ GESTURE_COMMANDS = {
 }
 
 TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+WINDOW_TITLE = "PocketLab - Gesture Control"
 
 
 def log(message):
@@ -552,6 +553,8 @@ def parse_args():
     parser.add_argument("--camera", type=int, default=int(os.environ.get("POCKETLAB_CAMERA", "0")),
                         help="webcam index (default 0)")
     parser.add_argument("--no-discovery", action="store_true", help="skip UDP LAN discovery")
+    parser.add_argument("--pause-on-error", action="store_true",
+                        help="keep the console open after an error (used by the launcher)")
     return parser.parse_args()
 
 
@@ -598,6 +601,7 @@ def main():
     release_frames = 0
     last_command_time = 0.0
     last_ts = 0
+    window_seen = False
     fps_count, fps_start = 0, time.monotonic()
 
     try:
@@ -670,17 +674,56 @@ def main():
                             candidate_frames, candidate_confidence_total = 0, 0.0
 
                 draw_overlay(cv2, frame, client, worker, gesture_text, progress, live["fps"])
-                cv2.imshow("PocketLab - Gesture Control", frame)
+                cv2.imshow(WINDOW_TITLE, frame)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), ord("Q"), 27):
                     break
-                if cv2.getWindowProperty("PocketLab - Gesture Control", cv2.WND_PROP_VISIBLE) < 1:
+
+                # Stop when the user closes the window. Some OpenCV builds
+                # report "not visible" before the window first appears, so only
+                # trust this after the window has been seen as visible.
+                try:
+                    visible = cv2.getWindowProperty(WINDOW_TITLE, cv2.WND_PROP_VISIBLE)
+                except cv2.error:
+                    visible = -1
+                if visible >= 1:
+                    window_seen = True
+                elif window_seen and visible == 0:
+                    log("[CAMERA] Window closed.")
                     break
     finally:
         cap.release()
         cv2.destroyAllWindows()
 
 
+def error_log_path():
+    base = os.environ.get("LOCALAPPDATA")
+    folder = Path(base) / "PocketLab" if base else HERE
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "hand_tracking-error.log"
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    import traceback
+
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except Exception:  # noqa: BLE001 - show every startup error to the user
+        details = traceback.format_exc()
+        print("\n" + details)
+        try:
+            path = error_log_path()
+            path.write_text(time.strftime("%Y-%m-%d %H:%M:%S\n") + details, encoding="utf-8")
+            print(f"Saved to {path}")
+        except OSError:
+            pass
+        if "--pause-on-error" in sys.argv:
+            try:
+                input("\nThe PocketLab gesture agent stopped because of the error above. Press Enter to close...")
+            except EOFError:
+                pass
+        sys.exit(1)

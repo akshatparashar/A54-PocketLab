@@ -214,9 +214,19 @@ try {
                 $exe = $python[0]
                 $pyArgs = @()
                 if ($python.Count -gt 1) { $pyArgs += $python[1..($python.Count - 1)] }
-                $pyArgs += @(('"{0}"' -f $script), '--api', $Base)
-                Start-Process -FilePath $exe -ArgumentList $pyArgs -WorkingDirectory $Root
-                Write-Log "Started gesture agent: $exe $($pyArgs -join ' ')" 'Green'
+                $pyArgs += @(('"{0}"' -f $script), '--api', $Base, '--pause-on-error')
+                $proc = Start-Process -FilePath $exe -ArgumentList $pyArgs -WorkingDirectory $Root -PassThru
+                Write-Log "Started gesture agent (pid $($proc.Id)): $exe $($pyArgs -join ' ')" 'Green'
+
+                # MediaPipe takes a few seconds to load; if the process is gone
+                # by then, it failed to start.
+                Start-Sleep -Seconds 10
+                if ($proc.HasExited) {
+                    $errorLog = Join-Path $StateDir 'hand_tracking-error.log'
+                    Show-Problem ("The gesture agent exited right after starting (exit code $($proc.ExitCode)).`n`n" +
+                        "Details: $errorLog`n`nTo see the error, run in PowerShell:`n" +
+                        "cd $Root; .\.venv\Scripts\python.exe hand_tracking.py --api $Base")
+                }
             }
         }
     }
