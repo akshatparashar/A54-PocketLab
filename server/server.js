@@ -871,10 +871,10 @@ app.use((error, req, res, next) => {
     return next(error);
 });
 
-// Dashboard: works for the repo layout (../dashboard) and the older phone
-// layout (server/dashboard).
+// Dashboard: the repo layout (../dashboard) wins over an older copy that may
+// still exist at server/dashboard on the phone.
 const DASHBOARD_DIR =
-    [path.join(__dirname, "dashboard"), path.join(__dirname, "..", "dashboard")].find(dir =>
+    [path.join(__dirname, "..", "dashboard"), path.join(__dirname, "dashboard")].find(dir =>
         fs.existsSync(path.join(dir, "index.html"))
     ) || path.join(__dirname, "..", "dashboard");
 

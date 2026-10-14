@@ -36,7 +36,36 @@ fi
 
 say "Getting PocketLab into $TARGET"
 if [ -d "$TARGET/.git" ]; then
-    git -C "$TARGET" pull --ff-only
+    git -C "$TARGET" fetch origin
+    upstream="$(git -C "$TARGET" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo origin/main)"
+    backup="$TARGET.backup-$(date +%Y%m%d-%H%M%S)"
+    moved=0
+
+    # Files you created by hand that the new version also contains (untracked
+    # in your copy) would block the update: move them to a backup folder.
+    while IFS= read -r file; do
+        if [ -e "$TARGET/$file" ] && ! git -C "$TARGET" ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+            mkdir -p "$backup/$(dirname "$file")"
+            mv "$TARGET/$file" "$backup/$file"
+            moved=1
+        fi
+    done < <(git -C "$TARGET" ls-tree -r --name-only "$upstream")
+
+    # An old dashboard copy inside server/ is replaced by the top-level dashboard/.
+    if [ -d "$TARGET/server/dashboard" ] && [ -z "$(git -C "$TARGET" ls-files -- server/dashboard)" ]; then
+        mkdir -p "$backup/server"
+        mv "$TARGET/server/dashboard" "$backup/server/dashboard"
+        moved=1
+    fi
+
+    [ "$moved" = 1 ] && echo "Moved your old copies of the PocketLab files to $backup"
+
+    if ! git -C "$TARGET" merge --ff-only "$upstream"; then
+        echo
+        echo "Could not update $TARGET automatically (you have local edits to tracked files)."
+        echo "Run:  git -C $TARGET stash   and then run this installer again."
+        exit 1
+    fi
 else
     if [ -d "$TARGET" ]; then
         backup="$TARGET.backup-$(date +%Y%m%d-%H%M%S)"
