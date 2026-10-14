@@ -94,7 +94,7 @@ rotate_log() {
 }
 
 wake_lock() {
-    have termux-wake-lock && termux-wake-lock >/dev/null 2>&1
+    have termux-wake-lock && termux-wake-lock </dev/null >/dev/null 2>&1
 }
 
 detach() {
@@ -411,7 +411,7 @@ EOF
 
     if have termux-job-scheduler; then
         if run_timeout 15 termux-job-scheduler --job-id "$JOB_ID" --script "$POCKETLAB_HOME/bin/pocketlab-job" \
-            --period-ms 900000 --persisted true --network none >/dev/null 2>&1; then
+            --period-ms 900000 --persisted true --network none </dev/null >/dev/null 2>&1; then
             echo "  ✓ termux-job-scheduler job #$JOB_ID every 15 min"
         else
             echo "  ! termux-job-scheduler failed (is the Termux:API app installed?)"
@@ -436,7 +436,7 @@ autostart_disable() {
     for file in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
         remove_line "$file" "$HOOK_LINE"
     done
-    have termux-job-scheduler && run_timeout 15 termux-job-scheduler --cancel --job-id "$JOB_ID" >/dev/null 2>&1
+    have termux-job-scheduler && run_timeout 15 termux-job-scheduler --cancel --job-id "$JOB_ID" </dev/null >/dev/null 2>&1
     echo "PocketLab autostart disabled."
 }
 
